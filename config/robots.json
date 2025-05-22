@@ -1,0 +1,9 @@
+[
+    {
+        "name": "epson_robot",
+        "ip": "192.168.10.50",
+        "cmd_port": 60000,
+        "status_port": 60001,
+        "remark": "左1"
+    }
+]
