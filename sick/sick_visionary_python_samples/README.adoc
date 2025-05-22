@@ -1,0 +1,51 @@
+# Python 3 programming example for Visionary cameras
+
+The samples show how to interact with the **SICK Visionary** devices and retrieve data in various ways.
+
+## Requirements
+
+* python >= 3.7
+** numpy
+** matplotlib
+** scikit-image
+** psutil
+
+After you have installed python, you can install the libraries via pip by executing the following command:
+```
+python -m pip install numpy matplotlib scikit-image psutil
+```
+
+## Quickstart
+
+- Change to the python folder and run the sample scripts.
+
+```shell script
+python visionary_HelloDevice.py
+```
+
+### The samples
+To provide a more practical introduction to our device API we decided to include some exemplary code which covers a
+good amount of API functionality.
+
+[horizontal]
+visionary_HelloDevice.py:: Very basic example showing how to read a variable (the device name and version) from any *_Visionary_* device.
+visionary_GetStarted.py:: Demonstrates how to control a *_Visionary-S_* or *_Visionary-T_* device and receive streaming data.
+visionary_StreamingDemo.py:: This is a more elaborate sample how to receive streaming data of multiple formats from a *_Visionary-S_* or *_Visionary-T_* device.
+visionary_JobSelection.py:: This sample shows how to select a specific job by its id. Works on all *_Visionary-T_* devices except the *_Visionary-T CX_* model.
+visionaryT-AG_demo.py:: This sample demonstrates how to retrieve data from a *_Visionary-T AG_* device.
+visionaryT-DT_demo.py:: This sample shows how to read the detection results from a *_Visionary-T DT_* device.
+visionaryT_SSRloading.py:: This script demonstrates how to load the data from a SSR file recorded with a *_Visionary-T_* device.
+visionaryT-Mini_DHCP.py:: This script demonstrates how to activate DHCP and activate again the static IP with a *_Visionary-T Mini_* device.
+visionaryT-Mini_Statemap.py:: This script demonstrates how to visualize the statemap with a *_Visionary-T Mini_* device.
+visionaryS_SaveDepthDataToPng.py:: This sample demonstrates how to retrieve depth data from a *_Visionary-S_* device and save the data in the PNG image format.
+visionaryS_TriggerAutoExposure.py:: This sample demonstrates how to use the auto exposure functions of a *_Visionary-S_* device by invoking the method `TriggerAutoExposureParameterized`.
+visionary_ToPointCloud.py:: This sample demonstrates how to convert depth data from a *_Visionary-S_* or *_Visionary-T_* device to point cloud data. You can also choose an SSR recording as an input.
+visionaryS_SSRloading.py:: This script demonstrates how to load the data from a SSR file recorded with a *_Visionary-S_* device.
+
+NOTE: The full functionality of each sample is only guaranteed on the specified device (families)!
+
+## Support
+
+For questions regarding the python samples please contact:
+
+[TechSupport0905@sick.de](mailto:TechSupport0905@sick.de)
