@@ -11,10 +11,10 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QFrame, QSpacerItem, QSizePolicy, QComboBox,
                             QFileDialog, QTableWidget, QTableWidgetItem,
                             QHeaderView, QAbstractItemView, QDialog, QFormLayout,
-                            QMessageBox)
+                            QMessageBox, QAction)
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QImage, QFont, QPalette, QColor
-
+from Qcommon.decorators import catch_and_log
 # 直接从各个包导入，不使用完整的SickVision路径
 from sick.SickSDK import QtVisionSick
 from epson.EpsonRobot import EpsonRobot
@@ -100,6 +100,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("视觉系统")
         self.resize(1200, 800)
         
+        # 创建菜单栏
+        self.setup_menu_bar()
+        
         # 创建中央部件
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -125,14 +128,41 @@ class MainWindow(QMainWindow):
         self.setup_styles()
         # 加载默认配置
         self.load_robot_config()
-        self.log_output.append("系统启动成功")
+        self.log_output.append("界面加载完成")
 
+    def add_log(self, text: str, level: str = "info"):
+        """根据等级向日志输出控件写入彩色文本
+        level 可选: debug / info / warning / error
+        """
+        level = level.lower()
+        color_map = {
+            "debug": "gray",
+            "info": "blue",
+            "warning": "orange",
+            "error": "red",
+        }
+        color = color_map.get(level, "black")
+        self.log_output.append(f'<span style="color:{color};">[{level.upper()}] {text}</span>')
 
-    def load_system(self):
+    @catch_and_log(logger_name="VisionSystem")
+    def load_system(self, checked=False):
         """ 加载系统所需要的组件 """
         self.camera = QtVisionSick(ipAddr="192.168.10.5", port=2122, protocol="Cola2")
+        self.add_log("相机初始化完成", "debug")
+        self.add_log("相机连接中", "info")
+        if self.camera.connect(use_single_step=False):
+            self.add_log("相机连接成功", "info")
+        else:
+            self.add_log("相机连接失败,请检查相机是否上电及ip地址是否正确", "error")
+            return
         self.robot = EpsonRobot(ip="192.168.10.55", port=60000, status_port=60001)
-        self.detector = RKNN_YOLO()
+        # 如果模型路径可用，则传递给检测器
+        if getattr(self, "model_path", None):
+            self.detector = RKNN_YOLO(model_path=self.model_path, tracking=False)
+        else:
+            self.add_log("未选择模型文件，检测器初始化失败", "warning")
+    
+    
 
     def setup_left_panel(self):
         """设置左侧面板，包含视频/图像显示和日志输出"""
@@ -277,7 +307,7 @@ class MainWindow(QMainWindow):
                 background-color: #1a8047;
             }
         """)
-        
+        self.start_btn.clicked.connect(self.load_system)
         # 添加到右侧布局
         right_layout.addWidget(robot_group)
         right_layout.addWidget(model_group)
@@ -561,6 +591,8 @@ class MainWindow(QMainWindow):
             # 获取项目根目录
             root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             model_path = os.path.join(root_dir, "models", current_model)
+            # 将完整路径保存到实例属性，供后续使用
+            self.model_path = model_path
             
             if os.path.exists(model_path):
                 try:
@@ -580,8 +612,10 @@ class MainWindow(QMainWindow):
                     self.log_output.append(f"读取模型信息出错: {str(e)}")
             else:
                 self.model_info.setText("模型文件不存在")
+                self.model_path = None  # 文件不存在，清空路径
         else:
             self.model_info.setText("未选择有效模型")
+            self.model_path = None
 
     def setup_styles(self):
         """设置界面样式"""
@@ -642,6 +676,49 @@ class MainWindow(QMainWindow):
             }
         """)
 
+    def setup_menu_bar(self):
+        """创建菜单栏"""
+        menu_bar = self.menuBar()
+
+        # 系统菜单
+        system_menu = menu_bar.addMenu("系统")
+        exit_act = QAction("退出", self)
+        exit_act.triggered.connect(self.close)
+        system_menu.addAction(exit_act)
+
+        # 详细配置菜单
+        detail_menu = menu_bar.addMenu("详细配置")
+        open_cfg_act = QAction("打开机器人配置", self)
+        open_cfg_act.triggered.connect(self.open_config_file)
+        detail_menu.addAction(open_cfg_act)
+
+        # 版本菜单
+        version_menu = menu_bar.addMenu("版本")
+        about_act = QAction("关于", self)
+        about_act.triggered.connect(self.show_about_dialog)
+        version_menu.addAction(about_act)
+
+    def open_config_file(self):
+        """打开机器人配置文件所在目录"""
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config_dir = os.path.join(root_dir, "config")
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
+        # 使用文件浏览器打开目录
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(config_dir)
+            elif sys.platform.startswith("darwin"):
+                os.system(f"open {config_dir}")
+            else:
+                os.system(f"xdg-open {config_dir}")
+        except Exception as e:
+            QMessageBox.warning(self, "打开失败", f"无法打开目录: {str(e)}")
+
+    def show_about_dialog(self):
+        """显示版本信息"""
+        about_text = "VisionSystem\n版本: 1.0.0\n开发者:曹英杰"
+        QMessageBox.information(self, "关于", about_text)
 
 def main():
     app = QApplication(sys.argv)

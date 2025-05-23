@@ -30,7 +30,7 @@ class RKNN_YOLO:
     用于加载和运行RKNN模型进行目标检测
     """
     
-    def __init__(self, model_path, target='rk3588', device_id=None, conf_threshold=0.45, nms_threshold=0.45):
+    def __init__(self, model_path, target='rk3588', device_id=None, conf_threshold=0.45, nms_threshold=0.45, tracking=False):
         """
         初始化RKNN YOLO模型
         
@@ -40,6 +40,7 @@ class RKNN_YOLO:
             device_id (str, optional): 设备ID. 默认为 None
             conf_threshold (float, optional): 置信度阈值. 默认为 0.45
             nms_threshold (float, optional): NMS阈值. 默认为 0.45
+            tracking (bool, optional): 是否启用跟踪. 默认为 False
         """
         self.CLASSES = ['seasoning']
         self.meshgrid = []
@@ -58,7 +59,7 @@ class RKNN_YOLO:
         
         # 初始化ByteTrack跟踪器
         self.tracker = ByteTracker(track_thresh=0.5, track_buffer=30, match_thresh=0.8)
-        self.with_tracking = True  # 跟踪器开关
+        self.with_tracking = tracking  # 跟踪器开关
         
         try:
             # 初始化RKNN

@@ -84,9 +84,9 @@ class LogManager:
         for handler in logger.handlers[:]:
             logger.removeHandler(handler)
         
-        # 创建格式化器
+        # 日志格式（不包含文件名和行号，保护源码信息）
         formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         
         # 添加控制台处理器
@@ -95,9 +95,16 @@ class LogManager:
             console_handler.setFormatter(formatter)
             logger.addHandler(console_handler)
         
-        # 添加文件处理器
+        # 添加文件处理器（按日期生成文件名）
         if self.file_output:
-            log_file = os.path.join(self.log_dir, f"{name}.log")
+            today_str = datetime.date.today().isoformat()
+            log_file = os.path.join(self.log_dir, f"{name}_{today_str}.log")
+
+            # 如果已经有旧日期的文件处理器，则移除
+            for h in logger.handlers[:]:
+                if isinstance(h, TimedRotatingFileHandler):
+                    logger.removeHandler(h)
+
             file_handler = TimedRotatingFileHandler(
                 log_file,
                 when="midnight",
@@ -105,6 +112,8 @@ class LogManager:
                 backupCount=self.max_backup_count,
                 encoding="utf-8"
             )
+            # 设置后缀模板，使轮转文件名称符合日期
+            file_handler.suffix = "%Y-%m-%d.log"
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
         

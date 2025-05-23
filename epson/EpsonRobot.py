@@ -8,6 +8,7 @@ import socket
 import time
 import logging
 from typing import Tuple, Optional, Dict, Any
+from Qcommon.LogManager import LogManager
 
 class EpsonRobot:
     """
@@ -30,7 +31,8 @@ class EpsonRobot:
         self.cmd_socket = None  # 命令通道
         self.status_socket = None  # 状态通道
         self.is_connected = False
-        self.logger = logging.getLogger(__name__)
+        self.log_manager = LogManager()
+        self.logger = self.log_manager.get_logger("VisionSystem")
     
     def connect(self) -> bool:
         """

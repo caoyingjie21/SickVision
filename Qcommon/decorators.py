@@ -8,6 +8,7 @@ import time
 import logging
 import functools
 from typing import Type, Union, Tuple, List, Callable, Optional
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -155,4 +156,69 @@ def safe_disconnect(func):
             if hasattr(self, 'streaming_device'):
                 self.streaming_device = None
                 
-    return wrapper 
+    return wrapper
+
+
+def catch_and_log(
+    logger_name: Optional[str] = None,
+    log_level: int = logging.ERROR,
+    re_raise: bool = False,
+):
+    """捕获函数执行中的异常并记录日志，同时在带有 add_log 方法的对象上输出到界面。
+
+    Args:
+        logger_name (str, optional): 指定日志器名称，默认为从实例 logger 属性或根日志器。
+        log_level (int): 记录日志的级别，默认 logging.ERROR。
+        re_raise (bool): 捕获后是否继续抛出异常，默认 False。
+
+    用法示例：
+        @catch_and_log(logger_name=__name__)
+        def some_method(self):
+            ...
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # 推测第一个参数是 self
+            instance = args[0] if args else None
+            # 选择日志器
+            if logger_name is not None:
+                log = logging.getLogger(logger_name)
+                # 如果未配置处理器，则通过LogManager创建，避免丢失输出
+                if not log.handlers:
+                    try:
+                        from Qcommon.LogManager import LogManager
+                        log = LogManager().get_logger(logger_name)
+                    except Exception:
+                        pass
+            else:
+                log = getattr(instance, "logger", logger)
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                # 记录详细堆栈
+                err_trace = traceback.format_exc()
+                log.log(log_level, f"{func.__name__} 发生异常: {e}\n{err_trace}")
+
+                # 立即刷新所有处理器，确保写入文件
+                for h in log.handlers:
+                    try:
+                        h.flush()
+                    except Exception:
+                        pass
+
+                # 如果实例有 add_log 方法，则输出到UI日志面板
+                if instance is not None and hasattr(instance, "add_log"):
+                    try:
+                        instance.add_log(f"{func.__name__} 发生异常: {e}", "error")
+                    except Exception:
+                        pass  # 确保不会因 UI 输出再次报错
+
+                if re_raise:
+                    raise
+                return None  # 出错时返回 None
+
+        return wrapper
+
+    return decorator 
