@@ -14,7 +14,7 @@ import logging
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.decorators import retry
+from Qcommon.decorators import retry
 from sick import QtVisionSick
 
 # 配置日志

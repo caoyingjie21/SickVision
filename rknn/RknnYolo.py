@@ -22,7 +22,7 @@ from shapely.geometry import Polygon
 from ByteTracker import ByteTracker
 
 # from rknn.api import RKNN
-from rknn.api import RKNN
+# from rknn.api import RKNN
 
 class RKNN_YOLO:
     """
@@ -62,19 +62,19 @@ class RKNN_YOLO:
         
         try:
             # 初始化RKNN
-            self.rknn = RKNN(verbose=True)
+            # self.rknn = RKNN(verbose=True)
             
             # 加载模型
             ret = self.rknn.load_rknn(model_path)
             if ret != 0:
                 raise RuntimeError(f'Load RKNN model "{model_path}" failed!')
                 
-            # 初始化运行时环境，使用所有三个NPU核心
-            ret = self.rknn.init_runtime(
-                target=target,
-                device_id=device_id,
-                core_mask=RKNN.NPU_CORE_0 | RKNN.NPU_CORE_1 | RKNN.NPU_CORE_2  # 使用所有三个NPU核心
-            )
+            # # 初始化运行时环境，使用所有三个NPU核心
+            # ret = self.rknn.init_runtime(
+            #     target=target,
+            #     device_id=device_id,
+            #     core_mask=RKNN.NPU_CORE_0 | RKNN.NPU_CORE_1 | RKNN.NPU_CORE_2  # 使用所有三个NPU核心
+            # )
             if ret != 0:
                 raise RuntimeError('Init runtime environment failed!')
             

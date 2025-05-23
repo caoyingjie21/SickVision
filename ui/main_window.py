@@ -15,6 +15,12 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QImage, QFont, QPalette, QColor
 
+# 直接从各个包导入，不使用完整的SickVision路径
+from sick.SickSDK import QtVisionSick
+from epson.EpsonRobot import EpsonRobot
+from rknn.RknnYolo import RKNN_YOLO
+from Qcommon.LogManager import LogManager
+
 class RobotDialog(QDialog):
     """机器人配置对话框"""
     def __init__(self, parent=None, robot_data=None):
@@ -86,7 +92,10 @@ class RobotDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        
+        self.log_manager = LogManager()
+        self.logger = self.log_manager.get_logger("VisionSystem")
+        # 界面操作时记录日志
+        self.logger.info("应用程序启动")
         # 设置窗口标题和尺寸
         self.setWindowTitle("视觉系统")
         self.resize(1200, 800)
@@ -114,9 +123,16 @@ class MainWindow(QMainWindow):
         
         # 设置样式
         self.setup_styles()
-        
         # 加载默认配置
         self.load_robot_config()
+        self.log_output.append("系统启动成功")
+
+
+    def load_system(self):
+        """ 加载系统所需要的组件 """
+        self.camera = QtVisionSick(ipAddr="192.168.10.5", port=2122, protocol="Cola2")
+        self.robot = EpsonRobot(ip="192.168.10.55", port=60000, status_port=60001)
+        self.detector = RKNN_YOLO()
 
     def setup_left_panel(self):
         """设置左侧面板，包含视频/图像显示和日志输出"""
@@ -448,7 +464,7 @@ class MainWindow(QMainWindow):
                 self._add_table_item(i, 3, str(robot.get('status_port', "")))
                 self._add_table_item(i, 4, robot.get('remark', ""))
             
-            self.log_output.append(f"已从 {config_file} 加载 {len(robots)} 个机器人配置")
+            self.log_output.append(f"已加载 {len(robots)} 个机器人配置")
             
             # 选中第一行
             if self.robot_table.rowCount() > 0:

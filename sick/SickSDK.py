@@ -9,7 +9,7 @@ from common.Control import Control
 from common.Streaming import Data
 from common.Stream import Streaming
 from common.Streaming.BlobServerConfiguration import BlobClientConfig
-from common.decorators import retry, require_connection, safe_disconnect
+from Qcommon.decorators import retry, require_connection, safe_disconnect
 import cv2
 import numpy as np
 import time
