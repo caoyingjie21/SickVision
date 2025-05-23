@@ -13,7 +13,7 @@ from Qcommon.decorators import retry, require_connection, safe_disconnect
 import cv2
 import numpy as np
 import time
-import logging
+from Qcommon.LogManager import LogManager
 import socket
 
 class QtVisionSick:
@@ -39,7 +39,7 @@ class QtVisionSick:
         self.deviceControl = None
         self.streaming_device = None
         self.is_connected = False
-        self.logger = logging.getLogger(__name__)
+        self.logger = LogManager().get_logger()
         self.camera_params = None  # 存储相机参数
         self.use_single_step = True  # 默认使用单步模式
         
@@ -176,10 +176,8 @@ class QtVisionSick:
         Returns:
             tuple: (success, depth_data, intensity_image)
         """
-        if self.use_single_step:
-            wholeFrame = self.streaming_device.getFrame()
-        else:
-            wholeFrame = self.streaming_device.frame
+        self.streaming_device.getFrame()
+        wholeFrame = self.streaming_device.frame
         # 解析数据
         myData = Data.Data()
         myData.read(wholeFrame)
@@ -286,6 +284,7 @@ class QtVisionSick:
         
     def __del__(self):
         """确保在销毁时断开连接"""
+        self.logger.info("相机连接已销毁,释放资源")
         self.disconnect()
 
   

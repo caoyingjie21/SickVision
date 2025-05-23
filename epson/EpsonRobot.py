@@ -32,7 +32,7 @@ class EpsonRobot:
         self.status_socket = None  # 状态通道
         self.is_connected = False
         self.log_manager = LogManager()
-        self.logger = self.log_manager.get_logger("VisionSystem")
+        self.logger = self.log_manager.get_logger()
     
     def connect(self) -> bool:
         """

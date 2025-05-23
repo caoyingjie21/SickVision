@@ -14,6 +14,7 @@ import time
 import numpy as np
 import argparse
 import cv2,math
+import platform
 from math import ceil
 from itertools import product as product
 from shapely.geometry import Polygon
@@ -21,8 +22,20 @@ from shapely.geometry import Polygon
 # 导入ByteTrack跟踪器
 from ByteTracker import ByteTracker
 
-# from rknn.api import RKNN
-# from rknn.api import RKNN
+# -------- 平台适配导入 --------
+USING_PC = sys.platform.startswith("win") or platform.system().lower().startswith("windows")
+
+try:
+    if USING_PC:
+        from ultralytics import YOLO as UltralyticsYOLO
+        RKNN = None  # 占位，PC 上不用
+    else:
+        from rknn.api import RKNN
+        UltralyticsYOLO = None
+except ImportError:
+    # 如果对应包缺失
+    RKNN = None
+    UltralyticsYOLO = None
 
 class RKNN_YOLO:
     """
@@ -56,40 +69,38 @@ class RKNN_YOLO:
         self.conf_threshold = conf_threshold  # 添加置信度阈值属性
         self.nms_threshold = nms_threshold    # 添加NMS阈值属性
         self.rknn = None
+        self.pc_yolo = None  # Windows 平台使用
         
         # 初始化ByteTrack跟踪器
         self.tracker = ByteTracker(track_thresh=0.5, track_buffer=30, match_thresh=0.8)
         self.with_tracking = tracking  # 跟踪器开关
         
         try:
-            # 初始化RKNN
-            # self.rknn = RKNN(verbose=True)
-            
-            # 加载模型
-            ret = self.rknn.load_rknn(model_path)
-            if ret != 0:
-                raise RuntimeError(f'Load RKNN model "{model_path}" failed!')
-                
-            # # 初始化运行时环境，使用所有三个NPU核心
-            # ret = self.rknn.init_runtime(
-            #     target=target,
-            #     device_id=device_id,
-            #     core_mask=RKNN.NPU_CORE_0 | RKNN.NPU_CORE_1 | RKNN.NPU_CORE_2  # 使用所有三个NPU核心
-            # )
-            if ret != 0:
-                raise RuntimeError('Init runtime environment failed!')
-            
-            # 生成网格
-            self._generate_meshgrid()
+            if USING_PC:
+                if UltralyticsYOLO is None:
+                    raise RuntimeError("未安装 ultralytics 库，无法在 Windows 平台加载 YOLO 模型")
+                self.pc_yolo = UltralyticsYOLO(model_path)
+            else:
+                # 初始化RKNN
+                self.rknn = RKNN(verbose=True)
+                ret = self.rknn.load_rknn(model_path)
+                if ret != 0:
+                    raise RuntimeError(f'Load RKNN model "{model_path}" failed!')
+                ret = self.rknn.init_runtime(
+                    target=target,
+                    device_id=device_id,
+                    core_mask=RKNN.NPU_CORE_0 | RKNN.NPU_CORE_1 | RKNN.NPU_CORE_2)
+                if ret != 0:
+                    raise RuntimeError('Init runtime environment failed!')
+                self._generate_meshgrid()
         except Exception as e:
-            # 确保在初始化失败时释放资源
             if self.rknn is not None:
                 try:
                     self.rknn.release()
                 except:
                     pass
                 self.rknn = None
-            raise RuntimeError(f"初始化RKNN_YOLO时出错: {str(e)}")
+            raise RuntimeError(f"初始化模型时出错: {str(e)}")
         
     def _generate_meshgrid(self):
         """生成网格坐标"""
