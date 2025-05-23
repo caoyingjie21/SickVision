@@ -1,16 +1,9 @@
 [
     {
         "name": "epson_robot",
-        "ip": "192.168.10.50",
+        "ip": "192.168.10.56",
         "cmd_port": 60000,
         "status_port": 60001,
         "remark": "左1"
-    },
-    {
-        "name": "epson2",
-        "ip": "192.168.10.55",
-        "cmd_port": 60003,
-        "status_port": 60004,
-        "remark": ""
     }
 ]

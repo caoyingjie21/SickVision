@@ -99,7 +99,7 @@ class MainWindow(QMainWindow):
         # 设置窗口标题和尺寸
         self.setWindowTitle("视觉系统")
         self.resize(1200, 800)
-        
+        self.robots = {}
         # 创建菜单栏
         self.setup_menu_bar()
         
@@ -145,7 +145,7 @@ class MainWindow(QMainWindow):
         self.log_output.append(f'<span style="color:{color};">[{level.upper()}] {text}</span>')
 
     @catch_and_log(logger_name="VisionSystem")
-    def load_system(self, checked=False):
+    def load_system(self, b = False):
         """ 加载系统所需要的组件 """
         self.camera = QtVisionSick(ipAddr="192.168.10.5", port=2122, protocol="Cola2")
         self.add_log("相机初始化完成", "debug")
@@ -155,12 +155,24 @@ class MainWindow(QMainWindow):
         else:
             self.add_log("相机连接失败,请检查相机是否上电及ip地址是否正确", "error")
             return
-        self.robot = EpsonRobot(ip="192.168.10.55", port=60000, status_port=60001)
-        # 如果模型路径可用，则传递给检测器
-        if getattr(self, "model_path", None):
-            self.detector = RKNN_YOLO(model_path=self.model_path, tracking=False)
-        else:
-            self.add_log("未选择模型文件，检测器初始化失败", "warning")
+        robots = self.get_robot_list()
+        if robots:
+            for robot in robots:
+                self.robots[robot["name"]] = EpsonRobot(ip=robot["ip"],
+                                        port=robot["cmd_port"],
+                                        status_port=robot["status_port"])
+                self.add_log(f"机器人连接中: {robot['name']}", "info")
+                if self.robots[robot["name"]].connect():
+                    self.add_log(f"机器人连接成功: {robot['name']}", "info")
+                else:
+                    self.add_log(f"机器人连接失败: {robot['name']}", "error")
+        self.add_log(f"机器人连接完成,您现在可以控制{len(self.robots)}台机器人", "info")
+        
+        # 如果模型路径可用，则传递给检测器        # if getattr(self, "model_path", None):
+        #     self.detector = RKNN_YOLO(model_path=self.model_path, tracking=False)
+        # else:
+        #     self.add_log("未选择模型文件，检测器初始化失败", "warning")
+
     
     
 
@@ -719,6 +731,27 @@ class MainWindow(QMainWindow):
         """显示版本信息"""
         about_text = "VisionSystem\n版本: 1.0.0\n开发者:曹英杰"
         QMessageBox.information(self, "关于", about_text)
+
+    def get_robot_list(self):
+        """
+        返回当前表格中的机器人配置列表
+        [
+            {"name": "...", "ip": "...", "cmd_port": 60000, "status_port": 60001, "remark": "..."},
+            ...
+        ]
+        同时缓存到 self.robot_configs
+        """
+        robots = []
+        for row in range(self.robot_table.rowCount()):
+            robots.append({
+                "name": self.robot_table.item(row, 0).text(),
+                "ip": self.robot_table.item(row, 1).text(),
+                "cmd_port": int(self.robot_table.item(row, 2).text()),
+                "status_port": int(self.robot_table.item(row, 3).text()),
+                "remark": self.robot_table.item(row, 4).text() if self.robot_table.item(row, 4) else ""
+            })
+        self.robot_configs = robots
+        return robots
 
 def main():
     app = QApplication(sys.argv)
