@@ -4,7 +4,6 @@
 import sys
 import os
 import time
-import cv2
 import json
 import platform
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
@@ -17,12 +16,14 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PyQt5.QtCore import Qt, QSize, QObject, pyqtSignal, QThread, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QFont, QPalette, QColor
 from Qcommon.decorators import catch_and_log
-# 直接从各个包导入，不使用完整的SickVision路径
+from SickVision.workflows.socket_thread import RobotCommandThread, RobotStatusThread
 from sick.SickSDK import QtVisionSick
 from epson.EpsonRobot import EpsonRobot
 from rknn.RknnYolo import RKNN_YOLO
 from Qcommon.LogManager import LogManager
 from workflows.system_loader import SystemLoader
+
+# 添加机器人命令通信线程类
 
 class RobotDialog(QDialog):
     """机器人配置对话框"""
@@ -131,6 +132,7 @@ class MainWindow(QMainWindow):
         self.setup_styles()
         # 加载默认配置
         self.load_robot_config()
+        self.load_camera_config()
         self.log_output.append("界面加载完成")
 
         # 用于实时刷新相机画面的定时器
@@ -150,6 +152,10 @@ class MainWindow(QMainWindow):
 
         # 系统运行状态标志
         self.system_running = False
+        
+        # 初始化机器人线程容器
+        self.robot_command_threads = {}
+        self.robot_status_threads = {}
 
     def add_log(self, text: str, level: str = "info"):
         """根据等级向日志输出控件写入彩色文本
@@ -166,7 +172,7 @@ class MainWindow(QMainWindow):
         self.log_output.append(f'<span style="color:{color};">[{level.upper()}] {text}</span>')
 
     def on_start_clicked(self):
-        cfg_cam = {"ipAddr": "192.168.10.5", "port": 2122 }
+        cfg_cam = {"ipAddr": self.camera_ip, "port": self.camera_port }
         cfg_robots = self.get_robot_list()
         mdl_path = getattr(self, "model_path", None)
 
@@ -186,17 +192,68 @@ class MainWindow(QMainWindow):
         self.detector = detector
         self.add_log("系统加载完成", "info")
         self.system_running = True
-        # 切换按钮为"停止系统"
         self.start_btn.setText("停止系统")
         self.start_btn.clicked.disconnect()
         self.start_btn.clicked.connect(self.stop_system)
+        
         # 启动相机画面刷新
         self.start_camera_stream()
+        
+        # 启动机器人通信线程
+        self.start_robot_threads()
+        
         if hasattr(self, "loader_thread") and self.loader_thread.isRunning() and self.loader_thread != QThread.currentThread():
             self.loader_thread.quit()
             self.loader_thread.wait()
         self.start_btn.setEnabled(True)
         
+    def start_robot_threads(self):
+        """启动所有机器人的通信线程"""
+        # 停止并清理已有的线程
+        self.stop_robot_threads()
+        
+        # 为每个机器人创建并启动线程
+        for name, robot in self.robots.items():
+            # 创建命令线程
+            cmd_thread = RobotCommandThread(robot, name)
+            cmd_thread.signal.connect(self.add_log)  # 连接日志信号
+            self.robot_command_threads[name] = cmd_thread
+            
+            # 创建状态线程
+            status_thread = RobotStatusThread(robot, name)
+            status_thread.signal.connect(self.add_log)  # 连接日志信号
+            status_thread.status_update.connect(self.handle_robot_status)  # 连接状态更新信号
+            self.robot_status_threads[name] = status_thread
+            
+            # 启动线程
+            cmd_thread.start()
+            status_thread.start()
+            
+            self.add_log(f"已启动机器人 {name} 的通信线程", "info")
+    
+    def stop_robot_threads(self):
+        """停止所有机器人通信线程"""
+        # 停止命令线程
+        for name, thread in self.robot_command_threads.items():
+            if thread and thread.isRunning():
+                thread.stop()
+                self.add_log(f"已停止机器人 {name} 的命令线程", "info")
+        
+        # 停止状态线程
+        for name, thread in self.robot_status_threads.items():
+            if thread and thread.isRunning():
+                thread.stop()
+                self.add_log(f"已停止机器人 {name} 的状态线程", "info")
+                
+        # 清空线程字典
+        self.robot_command_threads.clear()
+        self.robot_status_threads.clear()
+        
+    def handle_robot_status(self, robot_name, status):
+        """处理机器人状态更新"""
+        # 这里可以添加处理机器人状态的逻辑
+        # 例如更新UI显示、记录数据等
+        pass
 
     def handle_worker_error(self, msg: str):
         """
@@ -281,14 +338,20 @@ class MainWindow(QMainWindow):
         cam_port_label = QLabel("控制端口:")
         self.camera_port_input = QLineEdit("2122")
 
-        self.camera_test_btn = QPushButton("测试连接")
+        # 将单个"测试连接"按钮替换为"测试"和"确认"两个按钮
+        self.camera_test_btn = QPushButton("测试")
         self.camera_test_btn.clicked.connect(self.test_camera_connection)
+        
+        self.camera_confirm_btn = QPushButton("确认")
+        self.camera_confirm_btn.clicked.connect(self.confirm_camera_config)
 
         cam_form.addWidget(cam_ip_label,   0, 0)
         cam_form.addWidget(self.camera_ip_input, 0, 1)
         cam_form.addWidget(cam_port_label, 1, 0)
         cam_form.addWidget(self.camera_port_input, 1, 1)
-        cam_form.addWidget(self.camera_test_btn, 2, 0, 1, 2)
+        # 调整布局，使两个按钮在同一行
+        cam_form.addWidget(self.camera_test_btn, 2, 0)
+        cam_form.addWidget(self.camera_confirm_btn, 2, 1)
 
         # ---------------- 机器人连接配置组 -----------------
         # 创建机器人连接配置组
@@ -515,7 +578,7 @@ class MainWindow(QMainWindow):
         ip = self.robot_table.item(row, 1).text()
         cmd_port = int(self.robot_table.item(row, 2).text())
         status_port = int(self.robot_table.item(row, 3).text())
-        if(self.robots[robot_name] is not None):
+        if(self.robots.keys().__contains__(robot_name)):
             QMessageBox.warning(self, "警告", "机器人已连接,无需重复连接")
             self.add_log("机器人已连接,无需重复连接", "warning")
             return
@@ -616,6 +679,35 @@ class MainWindow(QMainWindow):
             self._add_table_item(0, 2, "60000")
             self._add_table_item(0, 3, "60001")
             self._add_table_item(0, 4, "默认配置")
+
+    def load_camera_config(self):
+        """从文件加载相机配置"""
+        # 获取配置文件路径
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config_file = os.path.join(root_dir, "config", "camera.json")
+        
+        # 检查文件是否存在
+        if not os.path.exists(config_file):
+            self.log_output.append("未找到相机配置文件，使用默认配置")
+            return
+        
+        # 从文件加载配置
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                camera_config = json.load(f)
+            
+            # 设置相机IP和端口
+            if 'ip' in camera_config:
+                self.camera_ip_input.setText(camera_config['ip'])
+                self.camera_ip = camera_config['ip']
+            if 'port' in camera_config:
+                self.camera_port_input.setText(str(camera_config['port']))
+                self.camera_port = camera_config['port']
+            
+            self.log_output.append("已加载相机配置")
+        
+        except Exception as e:
+            self.log_output.append(f"加载相机配置时出错: {str(e)}")
 
     def refresh_model_list(self):
         """刷新模型列表"""
@@ -879,6 +971,49 @@ class MainWindow(QMainWindow):
         else:
             self.add_log("相机连接失败", "error")
             QMessageBox.warning(self, "测试结果", "相机连接失败！")
+            
+    # ---------- 确认相机配置 ----------
+    def confirm_camera_config(self):
+        ip = self.camera_ip_input.text().strip()
+        try:
+            port = int(self.camera_port_input.text())
+        except ValueError:
+            QMessageBox.warning(self, "输入错误", "相机端口必须为数字！")
+            return
+        self.camera_ip = ip
+        self.camera_port = port
+        # 保存设置到配置文件
+        self.add_log(f"确认相机配置: IP={ip}, 端口={port}", "info")
+        
+        # 显示确认消息
+        QMessageBox.information(self, "相机配置", "相机配置已确认！")
+        
+        # 这里可以添加将配置保存到文件的代码
+        try:
+            # 获取配置目录
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            config_dir = os.path.join(root_dir, "config")
+            
+            # 确保目录存在
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+            
+            # 配置文件路径
+            config_file = os.path.join(config_dir, "camera.json")
+            
+            # 保存相机配置
+            camera_config = {
+                'ip': ip,
+                'port': port
+            }
+            
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(camera_config, f, ensure_ascii=False, indent=4)
+                
+            self.add_log(f"相机配置已保存到: {config_file}", "info")
+        except Exception as e:
+            self.add_log(f"保存相机配置时出错: {str(e)}", "error")
+            QMessageBox.warning(self, "保存失败", f"保存相机配置时出错: {str(e)}")
 
     # ------------------ 相机画面刷新 ------------------
     def start_camera_stream(self):
@@ -889,7 +1024,7 @@ class MainWindow(QMainWindow):
             self.camera_timer = QTimer(self)
             self.camera_timer.timeout.connect(self.update_camera_view)
         if not self.camera_timer.isActive():
-            self.camera_timer.start(50)  # 约20FPS
+            self.camera_timer.start(33)  # 约30FPS
 
     def stop_camera_stream(self):
         if self.camera_timer and self.camera_timer.isActive():
@@ -923,6 +1058,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         # 停止定时器，断开设备
         self.stop_camera_stream()
+        # 停止机器人线程
+        self.stop_robot_threads()
         try:
             if hasattr(self, "camera") and self.camera:
                 self.camera.disconnect()
@@ -940,6 +1077,9 @@ class MainWindow(QMainWindow):
 
         # 停止相机流
         self.stop_camera_stream()
+        
+        # 停止机器人线程
+        self.stop_robot_threads()
 
         # 断开相机
         try:
@@ -975,44 +1115,13 @@ class MainWindow(QMainWindow):
         
         self.add_log("开始测试模型加载…", "info")
         try:
-            # 第一步：加载模型
             detector = RKNN_YOLO(self.model_path)
-
-            # 第二步：获取当前相机帧
-            if not hasattr(self, "camera") or self.camera is None:
-                QMessageBox.warning(self, "测试模型", "相机未连接或尚未开启！")
-                self.add_log("相机未连接，无法获取帧进行检测", "warning")
-                detector.release()
-                return
-
-            ok, _, frame = self.camera.get_frame()
-            if not ok or frame is None:
-                QMessageBox.warning(self, "测试模型", "获取相机帧失败！")
-                self.add_log("获取相机帧失败", "error")
-                detector.release()
-                return
-            # 第三步：执行检测
-            results = detector.detect(frame)
-            print(results)
-            # 可选：将结果绘制并展示在右侧 image_view
-            try:
-                vis_img = detector.draw_result(frame, results, draw_track_id=False)
-                rgb = cv2.cvtColor(vis_img, cv2.COLOR_BGR2RGB)
-                h, w, _ = rgb.shape
-                qimg = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888)
-                pix = QPixmap.fromImage(qimg).scaled(self.image_view.size(), Qt.KeepAspectRatio)
-                self.image_view.setPixmap(pix)
-            except Exception:
-                pass
-
+            detector.release()
+            QMessageBox.information(self, "测试模型", "模型加载成功！")
+            self.add_log("模型加载成功", "info")
         except Exception as e:
-            QMessageBox.warning(self, "测试模型", f"模型加载/检测失败: {e}")
-            self.add_log(f"模型加载/检测失败: {e}", "error")
-        finally:
-            try:
-                detector.release()
-            except Exception:
-                pass
+            QMessageBox.warning(self, "测试模型", f"模型加载失败: {e}")
+            self.add_log(f"模型加载失败: {e}", "error")
 
 def main():
     app = QApplication(sys.argv)

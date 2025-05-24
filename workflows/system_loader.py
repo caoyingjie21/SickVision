@@ -26,7 +26,6 @@ class SystemLoader(QObject):
 
             # 2. 机器人
             robots = {}
-            print(self.robots_cfg)
             for cfg in self.robots_cfg:
                 self.progress.emit(f"连接机器人 {cfg['name']}…", "info")
                 bot_svc = EpsonRobot(cfg["ip"], cfg["cmd_port"], cfg["status_port"])
@@ -35,11 +34,12 @@ class SystemLoader(QObject):
                     self.progress.emit(f"{cfg['name']} 连接成功", "info")
                 else:
                     self.progress.emit(f"{cfg['name']} 连接失败", "warning")
-
-            # 3. 模型
-            # vision_svc = RKNN_YOLO(self.model_path)
-            # vision_svc.init_detector()
-            vision_svc = None
+            if(len(robots) > 4):
+                raise BufferError("最大支持4个机器人的连接")
+            # 3. 模型加载
+            vision_svc = RKNN_YOLO(self.model_path)
+            if vision_svc.pc_yolo is None and vision_svc.rknn is None:
+                raise RuntimeError("模型加载失败")
 
             self.finished.emit(cam_svc, robots, vision_svc)
 
