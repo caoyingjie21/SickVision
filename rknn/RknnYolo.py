@@ -310,18 +310,34 @@ class RKNN_YOLO:
         Returns:
             list: 检测结果列表，每个元素为DetectBox对象
         """
+        
+
+        # Windows / PC: 使用 UltralyticsYOLO
+        if self.pc_yolo is not None:
+            image_h, image_w = image.shape[:2]
+            img_resized = cv2.resize(image, (256, 256), interpolation=cv2.INTER_LINEAR)
+            img_bgr = cv2.cvtColor(img_resized, cv2.COLOR_GRAY2BGR)
+            print(img_bgr.shape)
+            print(type(img_bgr))
+            # UltralyticsYOLO 期待 BGR 或路径输入，直接传递 ndarray
+            m = self.pc_yolo.predict(img_bgr)
+            return m[0].obb.xyxyxyxy
+
+        # AARCH: 使用 RKNN 推理
+        if self.rknn is None:
+            raise RuntimeError("当前实例未加载任何模型")
+
         # 预处理
         image_h, image_w = image.shape[:2]
-        image = cv2.resize(image, (self.input_width, self.input_height), interpolation=cv2.INTER_LINEAR)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image = np.expand_dims(image, 0)
+        img_resized = cv2.resize(image, (self.input_width, self.input_height), interpolation=cv2.INTER_LINEAR)
+        img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+        img_rgb = np.expand_dims(img_rgb, 0)
         
         # 推理
-        results = self.rknn.inference(inputs=[image], data_format='nhwc')
-        
+        results = self.rknn.inference(inputs=[img_rgb], data_format='nhwc')
         # 后处理
         pred_boxes = self._postprocess(results)
-        
+
         # 转换回原始图像尺寸
         for box in pred_boxes:
             box.pt1x = int(box.pt1x / self.input_width * image_w)
@@ -332,7 +348,7 @@ class RKNN_YOLO:
             box.pt3y = int(box.pt3y / self.input_height * image_h)
             box.pt4x = int(box.pt4x / self.input_width * image_w)
             box.pt4y = int(box.pt4y / self.input_height * image_h)
-            
+
         return pred_boxes
     
     def detect_and_track(self, image):
@@ -478,7 +494,6 @@ class RKNN_YOLO:
                 box = result
                 track_id = -1
                 color = colors[0]  # 默认颜色
-            
             # 绘制检测框
             pts = np.array([[box.pt1x, box.pt1y], [box.pt2x, box.pt2y], 
                             [box.pt3x, box.pt3y], [box.pt4x, box.pt4y]], np.int32)

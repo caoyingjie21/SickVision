@@ -4,6 +4,7 @@
 import sys
 import os
 import time
+import cv2
 import json
 import platform
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
@@ -974,13 +975,44 @@ class MainWindow(QMainWindow):
         
         self.add_log("开始测试模型加载…", "info")
         try:
+            # 第一步：加载模型
             detector = RKNN_YOLO(self.model_path)
-            detector.release()
-            QMessageBox.information(self, "测试模型", "模型加载成功！")
-            self.add_log("模型加载成功", "info")
+
+            # 第二步：获取当前相机帧
+            if not hasattr(self, "camera") or self.camera is None:
+                QMessageBox.warning(self, "测试模型", "相机未连接或尚未开启！")
+                self.add_log("相机未连接，无法获取帧进行检测", "warning")
+                detector.release()
+                return
+
+            ok, _, frame = self.camera.get_frame()
+            if not ok or frame is None:
+                QMessageBox.warning(self, "测试模型", "获取相机帧失败！")
+                self.add_log("获取相机帧失败", "error")
+                detector.release()
+                return
+            # 第三步：执行检测
+            results = detector.detect(frame)
+            print(results)
+            # 可选：将结果绘制并展示在右侧 image_view
+            try:
+                vis_img = detector.draw_result(frame, results, draw_track_id=False)
+                rgb = cv2.cvtColor(vis_img, cv2.COLOR_BGR2RGB)
+                h, w, _ = rgb.shape
+                qimg = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888)
+                pix = QPixmap.fromImage(qimg).scaled(self.image_view.size(), Qt.KeepAspectRatio)
+                self.image_view.setPixmap(pix)
+            except Exception:
+                pass
+
         except Exception as e:
-            QMessageBox.warning(self, "测试模型", f"模型加载失败: {e}")
-            self.add_log(f"模型加载失败: {e}", "error")
+            QMessageBox.warning(self, "测试模型", f"模型加载/检测失败: {e}")
+            self.add_log(f"模型加载/检测失败: {e}", "error")
+        finally:
+            try:
+                detector.release()
+            except Exception:
+                pass
 
 def main():
     app = QApplication(sys.argv)
